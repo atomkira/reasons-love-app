@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Smooth fonts and base styles */
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  @apply antialiased;
+}
+
+/* Optional: refine focus outline colors for accessibility */
+:focus-visible {
+  outline-offset: 2px;
+}
