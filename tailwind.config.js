@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: 'class',
   content: [
     './index.html',
     './src/**/*.{js,ts,jsx,tsx}',
@@ -29,6 +30,8 @@ export default {
       },
       backgroundImage: {
         'love-gradient': 'linear-gradient(135deg, #ffe4e6 0%, #f5d0fe 50%, #e9d5ff 100%)',
+        'study-light': 'linear-gradient(135deg, #ffd1dc 0%, #e9d5ff 50%, #c7d2fe 100%)',
+        'study-dark': 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #111827 100%)',
       },
     },
   },
