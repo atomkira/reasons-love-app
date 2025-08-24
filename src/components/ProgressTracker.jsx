@@ -1,9 +1,6 @@
 import React, { useMemo, useState } from 'react'
 
-const subjects = ['Math', 'Physics', 'Chemistry', 'English']
-
-export default function ProgressTracker() {
-  const [hours, setHours] = useState(() => subjects.map((s) => ({ subject: s, weekly: 0 })))
+export default function ProgressTracker({ blocks = [] }) {
   const [dates, setDates] = useState(new Set()) // days studied (yyyy-mm-dd)
 
   const todayKey = new Date().toISOString().slice(0, 10)
@@ -22,31 +19,57 @@ export default function ProgressTracker() {
     return count
   }, [dates])
 
-  const setVal = (i, val) => {
-    setHours((arr) => arr.map((x, idx) => (idx === i ? { ...x, weekly: Math.max(0, Number(val) || 0) } : x)))
-  }
+  // Compute weekly totals from scheduled blocks
+  const weekly = useMemo(() => {
+    // Determine current ISO week range (Mon-Sun)
+    const now = new Date()
+    const day = (now.getDay() + 6) % 7 // Mon=0..Sun=6
+    const monday = new Date(now)
+    monday.setDate(now.getDate() - day)
+    monday.setHours(0, 0, 0, 0)
+    const sunday = new Date(monday)
+    sunday.setDate(monday.getDate() + 7)
 
-  const max = Math.max(1, ...hours.map((h) => h.weekly))
+    const totals = new Map() // key: subject lower, value: {subject,label, minutes}
+    for (const b of blocks) {
+      if (!b.date || !b.start || !b.end || !b.subject) continue
+      const d = new Date(b.date + 'T00:00:00')
+      if (!(d >= monday && d < sunday)) continue
+      const subKey = b.subject.trim().toLowerCase()
+      if (!subKey) continue
+      const [sh, sm] = b.start.split(':').map(Number)
+      const [eh, em] = b.end.split(':').map(Number)
+      let minutes = (eh * 60 + em) - (sh * 60 + sm)
+      if (!Number.isFinite(minutes) || minutes <= 0) continue
+      const prev = totals.get(subKey) || { subject: b.subject.trim(), minutes: 0 }
+      prev.minutes += minutes
+      totals.set(subKey, prev)
+    }
+    const items = Array.from(totals.values()).map((t) => ({
+      subject: t.subject,
+      weekly: +(t.minutes / 60).toFixed(2),
+    }))
+    return items
+  }, [blocks])
+
+  const max = Math.max(1, ...weekly.map((h) => h.weekly))
 
   return (
     <div className="rounded-2xl bg-white/80 dark:bg-slate-800/60 border border-white/60 dark:border-slate-700 p-5">
       <h3 className="font-bold">Weekly Hours per Subject</h3>
       <div className="mt-3 grid sm:grid-cols-2 gap-4">
-        {hours.map((h, i) => (
+        {weekly.length === 0 && (
+          <p className="text-sm opacity-75">No scheduled study blocks this week yet. Add some in Schedule to see progress here.</p>
+        )}
+        {weekly.map((h) => (
           <div key={h.subject} className="space-y-2">
             <div className="flex items-center gap-2">
               <div className="w-24 text-sm">{h.subject}</div>
-              <input
-                type="number"
-                min={0}
-                value={h.weekly}
-                onChange={(e) => setVal(i, e.target.value)}
-                className="w-24 rounded-md border px-2 py-1"
-              />
+              <div className="text-sm font-semibold">{h.weekly} h</div>
             </div>
-            <div className="h-3 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+            <div className="h-3 rounded-full bg-slate-300 dark:bg-slate-700/80 overflow-hidden">
               <div
-                className="h-full bg-rose-500 transition-all"
+                className="h-full bg-rose-500 dark:bg-rose-400 transition-all"
                 style={{ width: `${(h.weekly / max) * 100}%` }}
               />
             </div>

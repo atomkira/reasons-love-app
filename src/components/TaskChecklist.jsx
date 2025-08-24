@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useState, useEffect } from 'react'
+import { getJSON, postJSON, putJSON, del } from '../lib/api'
 
 const priorities = ['High', 'Medium', 'Low']
 
@@ -7,26 +8,57 @@ export default function TaskChecklist() {
   const [text, setText] = useState('')
   const [priority, setPriority] = useState('Medium')
 
-  const addTask = (e) => {
+  // Load tasks from backend on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await getJSON('/api/tasks')
+        setTasks(data)
+      } catch (e) {
+        console.error('Failed to load tasks', e)
+      }
+    })()
+  }, [])
+
+  const addTask = async (e) => {
     e.preventDefault()
     if (!text.trim()) return
-    setTasks((t) => [
-      ...t,
-      { id: crypto.randomUUID(), text: text.trim(), done: false, priority },
-    ])
-    setText('')
-    setPriority('Medium')
+    try {
+      const created = await postJSON('/api/tasks', { text: text.trim(), priority })
+      setTasks((t) => [...t, created])
+      setText('')
+      setPriority('Medium')
+    } catch (e) {
+      console.error('Failed to create task', e)
+    }
   }
 
-  const toggle = (id) => {
-    setTasks((t) =>
-      t.map((x) => (x.id === id ? { ...x, done: !x.done } : x))
-    )
+  const toggle = async (id) => {
+    const t = tasks.find((x) => x._id === id)
+    if (!t) return
+    try {
+      const updated = await putJSON(`/api/tasks/${id}`, { done: !t.done })
+      setTasks((arr) => arr.map((x) => (x._id === id ? updated : x)))
+    } catch (e) {
+      console.error('Failed to toggle task', e)
+    }
   }
-  const remove = (id) => setTasks((t) => t.filter((x) => x.id !== id))
+  const remove = async (id) => {
+    try {
+      await del(`/api/tasks/${id}`)
+      setTasks((t) => t.filter((x) => x._id !== id))
+    } catch (e) {
+      console.error('Failed to delete task', e)
+    }
+  }
 
-  const edit = (id, newText) => {
-    setTasks((t) => t.map((x) => (x.id === id ? { ...x, text: newText } : x)))
+  const edit = async (id, newText) => {
+    try {
+      const updated = await putJSON(`/api/tasks/${id}`, { text: newText })
+      setTasks((t) => t.map((x) => (x._id === id ? updated : x)))
+    } catch (e) {
+      console.error('Failed to edit task', e)
+    }
   }
 
   return (
@@ -55,7 +87,7 @@ export default function TaskChecklist() {
       <ul className="mt-4 space-y-2">
         {tasks.map((t) => (
           <li
-            key={t.id}
+            key={t._id || t.id}
             className={`group flex items-center gap-3 rounded-md border px-3 py-2 transition ${
               t.done
                 ? 'bg-green-50 border-green-200 dark:bg-green-900/30 dark:border-green-800'
@@ -65,11 +97,11 @@ export default function TaskChecklist() {
             <input
               type="checkbox"
               checked={t.done}
-              onChange={() => toggle(t.id)}
+              onChange={() => toggle(t._id)}
               className="h-5 w-5 accent-rose-500"
             />
             <span className={`flex-1 ${t.done ? 'line-through opacity-60' : ''}`}>
-              <EditableText text={t.text} onChange={(v) => edit(t.id, v)} />
+              <EditableText text={t.text} onChange={(v) => edit(t._id, v)} />
             </span>
             <span
               className={`text-xs px-2 py-0.5 rounded-full border ${
@@ -83,7 +115,7 @@ export default function TaskChecklist() {
               {t.priority}
             </span>
             <button
-              onClick={() => remove(t.id)}
+              onClick={() => remove(t._id)}
               className="opacity-60 hover:opacity-100 text-sm"
               title="Delete"
             >

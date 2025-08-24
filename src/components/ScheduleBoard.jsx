@@ -1,22 +1,32 @@
 import React, { useState } from 'react'
 
-export default function ScheduleBoard() {
-  const [blocks, setBlocks] = useState([])
-  const [modal, setModal] = useState(null) // {id?, subject, start, end}
+export default function ScheduleBoard({ blocks, setBlocks, onCreateBlock, onUpdateBlock, onDeleteBlock }) {
+  const [modal, setModal] = useState(null) // {id?, subject, start, end, date}
 
-  const openAdd = () => setModal({ subject: '', start: '09:00', end: '10:00' })
+  const today = new Date().toISOString().slice(0, 10)
+  const openAdd = () => setModal({ subject: '', start: '09:00', end: '10:00', date: today })
   const openEdit = (b) => setModal({ ...b })
   const close = () => setModal(null)
-  const save = () => {
-    if (!modal.subject || !modal.start || !modal.end) return
-    if (modal.id) {
-      setBlocks((arr) => arr.map((x) => (x.id === modal.id ? modal : x)))
-    } else {
-      setBlocks((arr) => [...arr, { ...modal, id: crypto.randomUUID() }])
+  const save = async () => {
+    if (!modal.subject || !modal.start || !modal.end || !modal.date) return
+    try {
+      if (modal.id) {
+        await onUpdateBlock?.(modal.id, modal)
+      } else {
+        await onCreateBlock?.(modal)
+      }
+      close()
+    } catch (e) {
+      console.warn('Save failed', e)
     }
-    close()
   }
-  const remove = (id) => setBlocks((arr) => arr.filter((x) => x.id !== id))
+  const remove = async (id) => {
+    try {
+      await onDeleteBlock?.(id)
+    } catch (e) {
+      console.warn('Delete failed', e)
+    }
+  }
   const move = (idx, dir) => {
     setBlocks((arr) => {
       const copy = arr.slice()
@@ -61,19 +71,25 @@ export default function ScheduleBoard() {
             <div className="space-y-2">
               <label className="block text-sm">Subject</label>
               <input
-                placeholder="e.g., Math, Biology, History"
                 value={modal.subject}
                 onChange={(e) => setModal((m) => ({ ...m, subject: e.target.value }))}
-                className="w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white/90 dark:bg-slate-700/60 px-2 py-1.5"
+                className="w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white/90 dark:bg-slate-700/60 px-2 py-1.5 text-slate-900 dark:text-slate-100 placeholder-slate-500 dark:placeholder-slate-300"
+              />
+              <label className="block text-sm mt-2">Date</label>
+              <input
+                type="date"
+                value={modal.date}
+                onChange={(e) => setModal((m) => ({ ...m, date: e.target.value }))}
+                className="w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white/90 dark:bg-slate-700/60 px-2 py-1.5 text-slate-900 dark:text-slate-100 placeholder-slate-500 dark:placeholder-slate-300"
               />
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block text-sm">Start</label>
-                  <input type="time" value={modal.start} onChange={(e) => setModal((m) => ({ ...m, start: e.target.value }))} className="w-full rounded-md border px-2 py-1.5 text-slate-900 dark:text-slate-100" />
+                  <input type="time" value={modal.start} onChange={(e) => setModal((m) => ({ ...m, start: e.target.value }))} className="w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white/90 dark:bg-slate-700/60 px-2 py-1.5 text-slate-900 dark:text-slate-100 placeholder-slate-500 dark:placeholder-slate-300" />
                 </div>
                 <div>
                   <label className="block text-sm">End</label>
-                  <input type="time" value={modal.end} onChange={(e) => setModal((m) => ({ ...m, end: e.target.value }))} className="w-full rounded-md border px-2 py-1.5 text-slate-900 dark:text-slate-100" />
+                  <input type="time" value={modal.end} onChange={(e) => setModal((m) => ({ ...m, end: e.target.value }))} className="w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white/90 dark:bg-slate-700/60 px-2 py-1.5 text-slate-900 dark:text-slate-100 placeholder-slate-500 dark:placeholder-slate-300" />
                 </div>
               </div>
               <div className="mt-3 flex justify-end gap-2">

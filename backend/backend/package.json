@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "study-tracker-backend": "file:.."
+  }
+}

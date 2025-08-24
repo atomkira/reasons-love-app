@@ -4,10 +4,103 @@ const WORK_MIN = 25
 const BREAK_MIN = 5
 
 export default function PomodoroTimer() {
-  const [isRunning, setIsRunning] = useState(false)
-  const [isBreak, setIsBreak] = useState(false)
-  const [secondsLeft, setSecondsLeft] = useState(WORK_MIN * 60)
+  // Seed state synchronously from localStorage to avoid visible reset on reload
+  const initial = (() => {
+    try {
+      const raw = localStorage.getItem('pomodoro')
+      if (raw) {
+        const saved = JSON.parse(raw)
+        let { isRunning: r, isBreak: b, secondsLeft: s, referenceTs } = saved || {}
+        if (typeof s === 'number') {
+          if (r && referenceTs) {
+            const now = Date.now()
+            s = Math.floor(s - (now - referenceTs) / 1000)
+            while (s <= 0) {
+              b = !b
+              s += (b ? BREAK_MIN : WORK_MIN) * 60
+            }
+          }
+          return { r: !!r, b: !!b, s, ref: referenceTs || Date.now() }
+        }
+      }
+    } catch {}
+    return { r: false, b: false, s: WORK_MIN * 60, ref: Date.now() }
+  })()
+
+  const [isRunning, setIsRunning] = useState(initial.r)
+  const [isBreak, setIsBreak] = useState(initial.b)
+  const [secondsLeft, setSecondsLeft] = useState(initial.s)
   const intervalRef = useRef(null)
+  const lastTickRef = useRef(null) // ms timestamp of last update
+  const clientIdRef = useRef(null)
+  const localRefTsRef = useRef(0)
+  const initialSnapshotRef = useRef({ r: initial.r, s: initial.s })
+  const hadLocalAtMountRef = useRef(() => {
+    try { return !!localStorage.getItem('pomodoro') } catch { return false }
+  })
+
+  // Restore clientId and set refs on mount
+  useEffect(() => {
+    // Ensure a stable clientId stored locally for server-side state
+    try {
+      let cid = localStorage.getItem('pomodoro_client_id')
+      if (!cid) {
+        // crypto.randomUUID is supported in modern browsers
+        cid = crypto?.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)
+        localStorage.setItem('pomodoro_client_id', cid)
+      }
+      clientIdRef.current = cid
+    } catch {}
+    lastTickRef.current = Date.now()
+    localRefTsRef.current = initial.ref
+  }, [])
+
+  // After initial local restore, attempt to load from backend (if available)
+  useEffect(() => {
+    // If we already had a local snapshot, skip server load to avoid overrides
+    const hadLocal = typeof hadLocalAtMountRef.current === 'function' ? hadLocalAtMountRef.current() : !!hadLocalAtMountRef.current
+    if (hadLocal) return
+    const loadFromServer = async () => {
+      const cid = clientIdRef.current
+      if (!cid) return
+      try {
+        const res = await fetch(`/api/pomodoro/${cid}`)
+        if (!res.ok) return
+        const doc = await res.json()
+        // Compute elapsed since server snapshot
+        let { isRunning: r, isBreak: b, secondsLeft: s, referenceTs } = doc || {}
+        if (typeof s !== 'number') return
+        // Prefer server state only if it's newer than the local snapshot
+        if (referenceTs && localRefTsRef.current && referenceTs <= localRefTsRef.current) {
+          return
+        }
+        if (r && referenceTs) {
+          const now = Date.now()
+          s = Math.floor(s - (now - referenceTs) / 1000)
+          while (s <= 0) {
+            b = !b
+            s += (b ? BREAK_MIN : WORK_MIN) * 60
+          }
+        }
+        // If local timer is running, only accept server if it is further progressed (smaller secondsLeft)
+        if (initialSnapshotRef.current.r === true && typeof s === 'number') {
+          if (s >= initialSnapshotRef.current.s) {
+            return
+          }
+        }
+        setIsRunning(!!r)
+        setIsBreak(!!b)
+        setSecondsLeft(s)
+        lastTickRef.current = Date.now()
+        localRefTsRef.current = referenceTs || Date.now()
+      } catch {
+        // ignore fetch errors, stay with local
+      }
+    }
+    loadFromServer()
+    // run only once after mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const total = (isBreak ? BREAK_MIN : WORK_MIN) * 60
   const progress = 1 - secondsLeft / total
@@ -25,9 +118,46 @@ export default function PomodoroTimer() {
         }
         return s - 1
       })
+      lastTickRef.current = Date.now()
     }, 1000)
     return () => clearInterval(intervalRef.current)
   }, [isRunning, isBreak])
+
+  // Persist state whenever it changes
+  useEffect(() => {
+    try {
+      const snapshot = {
+        isRunning,
+        isBreak,
+        secondsLeft,
+        referenceTs: Date.now(),
+      }
+      localStorage.setItem('pomodoro', JSON.stringify(snapshot))
+    } catch {}
+  }, [isRunning, isBreak, secondsLeft])
+
+  // Also sync to backend whenever state changes (best-effort)
+  useEffect(() => {
+    const save = async () => {
+      const cid = clientIdRef.current
+      if (!cid) return
+      try {
+        await fetch(`/api/pomodoro/${cid}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            isRunning,
+            isBreak,
+            secondsLeft,
+            referenceTs: Date.now(),
+          }),
+        })
+      } catch {
+        // ignore network errors
+      }
+    }
+    save()
+  }, [isRunning, isBreak, secondsLeft])
 
   const toggle = () => setIsRunning((r) => !r)
   const reset = () => {
