@@ -7,11 +7,22 @@ export default defineConfig({
   base: '/',
   server: {
     headers: {
-      'Content-Type': 'text/javascript'
+      'Content-Type': 'text/javascript',
+      'X-Content-Type-Options': 'nosniff'
+    },
+    fs: {
+      strict: false
     }
   },
   build: {
     outDir: 'dist',
-    assetsDir: 'assets'
+    assetsDir: 'assets',
+    rollupOptions: {
+      output: {
+        assetFileNames: 'assets/[name].[ext]',
+        entryFileNames: 'assets/[name].js',
+        chunkFileNames: 'assets/[name].js'
+      }
+    }
   }
 })
